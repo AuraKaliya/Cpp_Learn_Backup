@@ -185,7 +185,7 @@ int main()
 
 * 使用时，建立基类指针的模板，建立基类的指针new出具体子类，通过模板进行注册，通过模板进行调用函数。
 
-    1.function部分
+    1. function部分
     
     ```cpp
     
@@ -230,7 +230,7 @@ int main()
     
     ```
     
-    2.main()部分
+    2. main()部分
     
     ```c++
      {
@@ -246,7 +246,7 @@ int main()
         }//template实现类注册
     ```
     
-    3.输出部分
+    3. 输出部分
     
     ```cpp
     //输出：
@@ -282,7 +282,7 @@ int main()
 
     代码示例：
 
-    1.function部分
+    1. function部分
 
     ```c++
     namespace trans {
@@ -346,7 +346,7 @@ int main()
     }
     ```
 
-    2.main()部分
+    2. main()部分
 
     ```c++
      {
@@ -360,7 +360,7 @@ int main()
         }
     ```
 
-    3.输出部分
+    3. 输出部分
 
     ```c++
     //输出：
@@ -376,7 +376,7 @@ int main()
 
 ​		C/C++程序的编译分为**预处理**、**编译**、**汇编**、**链接**四个阶段，在预处理阶段，会对源文件的伪指令和特殊符号进行处理，产生新的源代码交付给编译器，包括执行预处理指令和宏定义、代码替换和删除多余的空白符和注释。
 
-​		1.常用的预编译指令如下：
+​		1. 常用的预编译指令如下：
 
 ```c++
 #define   //宏定义命名，定义一个标识符来表示一个常量
@@ -397,7 +397,7 @@ __LINE__  //这会包含当前行号，一个十进制常量。
 __STDC__  //当编译器以 ANSI 标准编译时，则定义为 1；判断该文件是不是标准 C 程序。
 ```
 
-​		2.#和##介绍
+​		2. #和##介绍
 
 ​		字符串化运算符#可以将宏参数转换成字符串文本const char[]；标记连接运算符##可以把两个参数连接到一起，其含义就是连接后形成的新的标识符的含义。此处有一个示例：
 
@@ -426,7 +426,7 @@ value9 = 10
 
 ​		具体实现的示例代码：
 
-​		1.function部分
+​		1. function部分
 
 ```c++
 namespace transPre {
@@ -502,7 +502,7 @@ static InstructionRegister insRegister##insName(#insName,createInstruction##insN
 }
 ```
 
-​		2.main()部分
+​		2. main()部分
 
 ```c++
  {
@@ -514,7 +514,7 @@ static InstructionRegister insRegister##insName(#insName,createInstruction##insN
 }
 ```
 
-​		3.输出部分
+​		3. 输出部分
 
 ```c++
 //输出：
@@ -522,5 +522,73 @@ static InstructionRegister insRegister##insName(#insName,createInstruction##insN
 solution: by Instruction_LoveUp
 solution: by Instruction_LoveDown
 */
+```
+
+#### Qt中的反射机制重写
+
+​		在Qt中，有时基于实际需求，需要从QWidget或QLabel等组件中扩展一个基类出来作为项目的接口类，但使用前文中“预编译和工厂类实现反射”的方法实践时会遇到“QWidget”不能在“QApplication”之前创建的错误，目前网络上的建议是不用static的QWidget，但在“预编译和工厂类实现反射”方法中又必须用到，在经过诸多尝试后，这里给出解决方案。
+
+​		改动地方：
+
+​		①使用模板在factory中构建一个function：
+
+```c++
+template <typename T>
+std::function<ClickLabel*(QWidget*)> createLabelCreator()
+{
+    return [](QWidget* parent) ->ClickLabel*
+    {
+        return new T(parent);
+    };
+}
+```
+
+​		②改动factory中的相关函数，使用新字典：
+
+```c++
+// .h
+void RegisterLabel(const QString &labelName,std::function<ClickLabel*(QWidget*)> labelClass);
+ClickLabel * CreateLabel(const QString &labelName,QWidget* parent=nullptr);
+QMap<QString,std::function<ClickLabel*(QWidget*)> > m_LabelCreator;
+
+//.cpp
+ClickLabel *LabelFactory::CreateLabel(const QString &labelName, QWidget *parent)
+{
+    auto it =m_LabelCreator.find(labelName);
+    if(it!=m_LabelCreator.end())
+    {
+        return it.value()(parent);
+    }
+    else
+    {
+        return nullptr;
+    }
+}
+void LabelFactory::RegisterLabel(const QString &labelName, std::function<ClickLabel *(QWidget *)> labelClass)
+{
+    m_LabelCreator.insert(labelName,labelClass);
+}
+```
+
+​		③改动register中相关函数：
+
+```c++
+//.h
+ LabelRegister(const QString &labelName,std::function<ClickLabel*(QWidget*)> labelClass);
+
+//.cpp
+LabelRegister::LabelRegister(const QString &labelName, std::function<ClickLabel *(QWidget *)> labelClass)
+{
+    LabelFactory* factory =LabelFactory::GetInstance();
+    factory->RegisterLabel(labelName,labelClass);
+}
+```
+
+​		④改动宏：
+
+```c++
+#define REGISTER_LABEL(labelName) static LabelRegister labelRegister_##labelName(#labelName,createLabelCreator< labelName > () );
+
+//注意：若createLabelCreator< labelName > () 中不空格，编译器会报错，具体参考报错信息。
 ```
 

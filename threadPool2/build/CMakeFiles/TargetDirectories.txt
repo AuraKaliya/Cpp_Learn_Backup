@@ -1,0 +1,3 @@
+/home/aurakaliya/codes/threadPool2/build/CMakeFiles/app.dir
+/home/aurakaliya/codes/threadPool2/build/CMakeFiles/edit_cache.dir
+/home/aurakaliya/codes/threadPool2/build/CMakeFiles/rebuild_cache.dir

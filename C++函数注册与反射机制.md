@@ -71,7 +71,7 @@ int main()
 
 #### 实现函数的注册与调用
 
-​		通过Function实现的函数注册，通常用于模块间的函数共享与回调机制的建立。其主要步骤如下：
+​	通过Function实现的函数注册，通常用于模块间的函数共享与回调机制的建立。其主要步骤如下：
 
 *  使用function对同一返回类型和参数列表的函数进行泛化。
 
@@ -177,9 +177,9 @@ int main()
 
 #### 实现模板类注册和调用
 
-​		通过模板类实现函数的注册和调用，主要步骤如下：
+​	通过模板类实现函数的注册和调用，主要步骤如下：
 
-* 建立注册类的模板，需要实现**注册、调用具体方法和维护**一个容器的功能。
+* 建立注册类的模板，需要实现**注册、调用具体方法和维护一个容器**的功能。
 
 * 在模板中调用的方法应该是接口类的方法，这一块涉及到虚函数。所以需要规范设计的类中方法的命名。
 
@@ -278,7 +278,7 @@ int main()
 
 * 当需要实例化子类时，使用字符串查找注册表，调用相应的构造函数创建对象。（构造函数存在在类表中）
 
-* 在运行时可通过此方法动态创建不同类的实例，**但注册必须在编码时完成**。
+* 在.，**但注册必须在编码时完成**。
 
     代码示例：
 
@@ -592,3 +592,199 @@ LabelRegister::LabelRegister(const QString &labelName, std::function<ClickLabel 
 //注意：若createLabelCreator< labelName > () 中不空格，编译器会报错，具体参考报错信息。
 ```
 
+
+
+#### 模板抽象化
+
+在制作毕设过程中，为方便反射机制的使用，将其通过模板进行抽象，实现多基类的反射机制搭建。
+
+目前，实现基于一般类、QObject和QWidget衍生的类三种的反射机制。
+
+1. Factory改动
+
+```c++
+#pragma once
+#include "Factory.hpp"
+
+template<class Base>
+class Register
+{
+public:
+    Register()=default;
+    Register(const QString & objectName,Base* objectClass)
+    {
+        Factory<Base>* factory=Factory<Base>::GetInstance();
+        factory->RegisterClass(objectName,objectClass);
+    };
+    Register(const QString &objectName,std::function<Base*(QObject*)> objectClass)
+    {
+        Factory<Base>* factory=Factory<Base>::GetInstance();
+        factory->RegisterObject(objectName,objectClass);
+    };
+    Register(const QString &objectName,std::function<Base*(QWidget*)> objectClass)
+    {
+        Factory<Base>* factory=Factory<Base>::GetInstance();
+        factory->RegisterWidget(objectName,objectClass);
+    };
+};
+
+template<typename T>
+    struct getTypeFormMember;
+
+template<typename M,typename T>
+struct getTypeFormMember<M T::*>
+{
+    using type=T;
+};
+
+#define REGISTER_CLASS(className,baseName) static Register< baseName > Register_##className( #className ,createFactoryCreator< className ,baseName > () );
+#define REGISTER_OBJECT(objectName,baseName) static Register< baseName > Register_##objectName( #objectName ,createObjectFactoryCreator< objectName , baseName > () );
+#define REGISTER_OBJECT_SINGLE(objectName,baseName) static Register< baseName > Register_##objectName( #objectName ,createObjectFactoryCreatorSingle< objectName , baseName > () );
+#define REGISTER_WIDGET(objectName,baseName) static Register< baseName > Register_##objectName( #objectName ,createWidgetFactoryCreator< objectName , baseName > () );
+#define REGISTER_WIDGET_SINGLE(objectName,baseName) static Register< baseName > Register_##objectName( #objectName ,createWidgetFactoryCreatorSingle< objectName , baseName > () );
+```
+
+
+
+Register改动内容
+
+```c++
+#pragma once
+#include "Factory.hpp"
+
+template<class Base>
+class Register
+{
+public:
+    Register()=default;
+    Register(const QString & objectName,Base* objectClass)
+    {
+        Factory<Base>* factory=Factory<Base>::GetInstance();
+        factory->RegisterObject(objectName,objectClass);
+    };
+    Register(const QString &objectName,std::function<Base*(QObject*)> objectClass)
+    {
+        Factory<Base>* factory=Factory<Base>::GetInstance();
+        factory->RegisterObject(objectName,objectClass);
+    };
+    Register(const QString &objectName,std::function<Base*(QWidget*)> objectClass)
+    {
+        Factory<Base>* factory=Factory<Base>::GetInstance();
+        factory->RegisterObject(objectName,objectClass);
+    };
+};
+
+template<typename T>
+    struct getTypeFormMember;
+
+template<typename M,typename T>
+struct getTypeFormMember<M T::*>
+{
+    using type=T;
+};
+
+#define REGISTER_OBJECT(objectName,baseName) static Register< baseName > Register_##objectName( #objectName ,createFactoryCreator< objectName , baseName > () );
+#define REGISTER_OBJECT_SINGLE(objectName,baseName) static Register< baseName > Register_##objectName( #objectName ,createFactoryCreatorSingle< objectName , baseName > () );
+#define REGISTER_WIDGET(objectName,baseName) static Register< baseName > Register_##objectName( #objectName ,createWidgetFactoryCreator< objectName , baseName > () );
+#define REGISTER_WIDGET_SINGLE(objectName,baseName) static Register< baseName > Register_##objectName( #objectName ,createWidgetFactoryCreatorSingle< objectName , baseName > () );
+```
+
+
+
+#### 更泛用的抽象
+
+毕设答辩顺利结束，在这个周末我也能静心下来完成对这个部分的最终更新。在实现上面的抽象之后，可以看到依然有代码重用的场景，意味着这个部分还可以进一步抽象。
+
+这部分的变量是给构造函数传递的参数，而函数参数的抽象包括参数类型抽象和参数数量抽象，那么选用模板的可变参数包就成为必然。
+
+同时，在宏定义中，也需要使用可变宏参数进行泛化。
+
+最终版本的代码如下：
+
+Factory改动内容
+
+```c++
+//Factory.hpp
+#pragma once
+#include <string>
+#include <map>
+#include <functional>
+
+template <class T, typename... Args>
+class Factory
+{
+public:
+    static Factory<T, Args...>* GetInstance()
+    {
+        if (m_instance == nullptr)
+        {
+            m_instance = new Factory();
+        }
+        return m_instance;
+    }
+
+    void RegisterClass(const std::string& objectName, std::function< T* ( Args... ) > objectClass)
+    {
+        m_factoryCreator[objectName] = objectClass;
+    }
+
+    T* CreateClass(const std::string& objectName, Args... args)
+    {
+        auto it = m_factoryCreator.find(objectName);
+        if (it != m_factoryCreator.end())
+        {
+            return it->second(args...);
+        }
+        else
+        {
+            return nullptr;
+        }
+    }
+
+private:
+    static Factory<T, Args...>* m_instance;
+
+    Factory() = default;
+
+    std::map<std::string, std::function<T* (Args...) > > m_factoryCreator;
+};
+
+template <class T, class... Args>
+Factory<T, Args...>* Factory<T, Args...>::m_instance = nullptr;
+
+template <class T, class Base, class... Args>
+std::function<Base* (Args...)> createFactoryCreator()
+{
+    return [](Args... arg) ->Base*
+    {
+        return new T(arg...);
+    };
+}
+```
+
+Register改动内容
+
+```c++
+//Register.hpp
+#pragma once
+#include "Factory.hpp"
+
+template <class Base, typename... Args>
+class Register
+{
+public:
+    Register(const std::string& objectName, std::function<Base* (Args...)> objectClass)
+    {
+        Factory<Base, Args...>* factory = Factory<Base, Args...>::GetInstance();
+        factory->RegisterClass(objectName, objectClass);
+    }
+};
+
+#define REGISTER_FUNCTIONNAME(line,objectClass,baseClass) Register_##objectClass##_##line
+#define REGISTER_CLASS_ARGS(line,objectClass,baseClass,...) \
+   static Register< baseClass , ##__VA_ARGS__ > REGISTER_FUNCTIONNAME(line,objectClass,baseClass)(  \
+#objectClass  , createFactoryCreator < objectClass , baseClass , ##__VA_ARGS__ > ( ) );
+#define REGISTER_CLASS(objectClass,baseClass,...) REGISTER_CLASS_ARGS(__LINE__,objectClass,baseClass,##__VA_ARGS__)
+```
+
+最终，我们用70行代码实现了一套预编译型的通用反射。
